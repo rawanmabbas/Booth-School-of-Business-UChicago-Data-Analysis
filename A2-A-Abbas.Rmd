@@ -1,0 +1,271 @@
+---
+title: "Assignment 2-A"
+author: "PLSC 21510/31510"
+date: "Fall 2022"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+### Instructions
+
+- __Assigned__: Apr 7
+- __Due__: Apr 15
+
+Answer the questions below. Knit this `.Rmd` document as a pdf and submit the pdf file in Canvas. Please avoid printing long outputs (like entire dataframes). 
+
+```{r message = FALSE}
+library(tidyverse)
+library(rvest)
+library(stringr)
+library(purrr)
+library(lubridate)
+library(rtweet)
+
+```
+
+## Part 1: Webscraping
+
+In this week's lecture, we introduced some tools to collect pieces of data from individual presidential documents. For this assignment, we will be looking at __all__ documents in the database that contain the string "space exploration." Our goals in this problem set are:
+
+1. To scrape all documents returned from [this search query](https://www.presidency.ucsb.edu/advanced-search?field-keywords=%22space+exploration%22&field-keywords2=&field-keywords3=&from%5Bdate%5D=&to%5Bdate%5D=&person2=&items_per_page=100)
+
+2. To organize this data into a dataframe and ultimately output a CSV file.
+
+Below, I've given you the code for a function that passes the URL of an individual document, scrapes the information from that document, and returns this information in a list.
+
+You must complete the rest of the task yourself. Specifically, you should:
+
+1. Write code that scrapes all documents, organizes the information in a dataframe, and writes a csv file.
+
+2. The end goal should be a dataset identical to the one I've provided for you in `data/space.csv`.
+
+3. Split the code up into discrete steps, each with their own corresponding Rmarkdown chunk. Use subheaders as necessary.
+
+4. Document (i.e. describe) each step in clear but concise Rmarkdown prose.
+
+5. The final chunk should:
+  * print the structure (`str`) of the final data frame.
+  * write the dataframe to a csv file. 
+
+Onward!
+
+First we will create a function that scrapes the links of every individual document 
+```{r}
+scrape_urls <- function(path) {
+  html <- read_html(path) 
+  
+  links <- html_nodes(html, ".views-field-title a") %>% 
+  html_attr("href")
+  base_url <- "https://www.presidency.ucsb.edu/"
+  all_links <- str_c(base_url, links)
+  return(all_links)
+}
+```
+
+I will then add every page link into a list and then I will map every page with the function to scrape each individual document.
+
+```{r}
+url1 <- "https://www.presidency.ucsb.edu/advanced-search?field-keywords=%22space%20exploration%22&field-keywords2=&field-keywords3=&from%5Bdate%5D=&to%5Bdate%5D=&person2=&items_per_page=100"
+
+url2 <- "https://www.presidency.ucsb.edu/advanced-search?field-keywords=%22space%20exploration%22&field-keywords2=&field-keywords3=&from%5Bdate%5D=&to%5Bdate%5D=&person2=&items_per_page=100&page=1"
+
+url3  <- "https://www.presidency.ucsb.edu/advanced-search?field-keywords=%22space%20exploration%22&field-keywords2=&field-keywords3=&from%5Bdate%5D=&to%5Bdate%5D=&person2=&items_per_page=100&page=2"
+
+url4 <- "https://www.presidency.ucsb.edu/advanced-search?field-keywords=%22space%20exploration%22&field-keywords2=&field-keywords3=&from%5Bdate%5D=&to%5Bdate%5D=&person2=&items_per_page=100&page=3"
+
+list_urls <- c(url1, url2, url3, url4) 
+
+
+all_urls <- map(list_urls, scrape_urls) %>%
+  unlist()
+```
+
+I will then use the scrape_docs function to scrape the date, speaker, title and text
+
+```{r}
+scrape_docs <- function(URL){
+
+ docs <- read_html(URL)
+ 
+date <- html_nodes(docs, ".date-display-single") %>%
+  html_text() %>% 
+  mdy()
+ 
+speaker <- html_nodes(docs, ".diet-title a") %>%
+  html_text() 
+
+
+title <- html_nodes(docs, "h1") %>%
+  html_text()
+
+
+
+text <- html_nodes(docs, "div.field-docs-content") %>%
+          html_text() 
+
+text %>% str_sub(1, 1000)
+
+result <- list(date = date, speaker = speaker, title = title, text = text)
+print(str_c("Scraping... ", title))
+
+return(result)
+   
+}
+```
+
+I will then map the scrape_docs function with every url of every document in order to extract the date, speaker, title and text of each individual document, then we will turn this list into a data frame with bind_rows()
+```{r}
+entire_pages <- map(all_urls, scrape_docs) %>% 
+  bind_rows()
+head(entire_pages)
+```
+
+The last step will be to print out the structure of the data frame and then write a csv file 
+```{r}
+str(entire_pages)
+write.csv(entire_pages,"/Users/rawanmahmoud/Desktop/TAD-S22-main/entire_text.csv", row.names = FALSE)
+``` 
+
+
+## Part 2: RTweet
+
+Work through the tutorial `2_Collecting/4_RTweet-Demo.Rmd`, which can be found in the main course materials. Below, enter your answers to the challenges.
+
+#### Challenge 1: Hashtag Challenge.
+
+Using the documentation for `search_tweets` as a guide, try pulling the 2,000 most recent tweets that include `#DukeEllington` OR `"Duke Ellington"` -- be sure to exclude retweets from the query.
+1. Why did your query not return 2,000 results?
+- beacuse it only returns the last 6-9 days 
+
+2. Identify the user that has used either the hashtag or the string in the greatest number of tweets -- where is this user from?
+
+```{r, message=FALSE}
+recent_tweets <- search_tweets( q = "Duke Ellington OR #DukeEllington", 
+                               n = 2000, 
+                               include_rts = FALSE, 
+                            
+                               )
+head(recent_tweets)
+```
+
+I will use the count function in order to know who uses the hashtag or the string the most.
+```{r}
+count(recent_tweets, screen_name, sort = TRUE)  
+```
+Then, I will use the filter function in order to filter the screen_name of the user that uses the string or hashtag the most. Then I willl assign it to a new variable "filtered."
+```{r}
+filtered <- filter(recent_tweets, screen_name == "901JazzPlaylist")
+```
+Lastly, I will use the select function on the variable filtered and the location column. The user turns out to be from Rochester, NY.   
+```{r}
+select(filtered, location)
+```
+
+#### Challenge 2. 
+
+Pick your favorite musical artist and collect the 1,000 most recent tweets they are mentioned in (either by their handle or plain text). What is the most frequently used hashtag in these tweets other than #artistname? 
+
+First, I will use search tweets to get the the most recent 1000 tweets
+
+```{r eval = F}
+
+music_tweets <- search_tweets(q = "harry styles OR @harrystyles",
+                              n = 1000 
+)
+
+music_tweets %>%
+  mutate(hashtags = as.character(hashtags)) %>%
+  filter(!is.na(hashtags),
+         !str_detect(hashtags, "c\\("))
+
+```
+
+Second, I will count the used hashtags to know which one was used the most. The most used hashtag is #AsItWas 
+```{r}
+music_tweets <- search_tweets(q = "harry styles OR @harrystyles",
+                              n = 1000 
+)
+
+music_tweets %>%
+  mutate(hashtags = as.character(hashtags)) %>%
+  filter(!is.na(hashtags),
+         !str_detect(hashtags, "c\\("))
+music_hashtags <- count(music_tweets, hashtags, sort = TRUE) %>% filter(!is.na(hashtags))
+view(music_hashtags)
+#when using head()  the hashtag does not appear, it only appears when using view()
+head(music_hashtags)
+```
+
+#### Challenge 3.
+
+Run the code below to by pull the 1,000 most recent tweets from 5 UChicago faculty members:
+
+```{r}
+profs1000 <- get_timeline(
+  user = c("carsonaust", "profpaulpoast", "pstanpolitics", 
+           "rochelleterman", "bobbygulotty"),
+
+  n = 1000
+)
+head(profs1000)
+```
+
+Which professors in the `profs1000` data use their iPhone to tweet? What percentage of their total tweets were sent from their iPhone?
+```{r}
+
+profs_filtered <- filter(profs1000, source =="Twitter for iPhone")
+
+
+filtered_again <- select(profs_filtered, screen_name, source)
+
+count_filtered <- count(filtered_again, screen_name, source, sort = TRUE) 
+count_filtered
+```
+
+Percentage of total tweets sent from an iphone where sum of n = total tweets of total professors 
+```{r}
+ all_profs <- profs1000 %>%
+    count(screen_name, source) %>% 
+    mutate(percent = n/sum(n)) %>% 
+    select(-n) 
+ all_profs
+```
+ 
+Percentage of tweets  sent from an iphone from the total tweets of each individual professor
+
+
+```{r}
+
+iphone_percentage <- function(prof_name){
+  
+  prof <- filter(profs1000, screen_name == prof_name)
+ percent_prof <- count(prof, screen_name, source)  %>% 
+    mutate(percent = n/sum(n)*100) %>% 
+    select(-n)
+ 
+ return( percent_prof)
+}
+```
+
+
+BobbyGulotty = 54.1
+```{r}
+iphone_percentage("BobbyGulotty")
+
+```
+
+RochelleTerman = 16.5 %
+```{r}
+iphone_percentage("RochelleTerman")
+```
+carsonaust = 56.9 %
+```{r}
+iphone_percentage("carsonaust")
+```
+pstanpolitics = 2.3 %
+```{r}
+iphone_percentage("pstanpolitics")
+```
+
